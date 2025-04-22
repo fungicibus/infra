@@ -1,17 +1,34 @@
 services:
-  postgres:
+  postgres-inventory:
     image: postgres:17
-    container_name: inventory-db
+    container_name: postgres-inventory
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-admin}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secretpassword}
       POSTGRES_DB: ${POSTGRES_DB:-inventory}
     ports:
       - "5432:5432"
     volumes:
-      - ./data/postgres_data:/var/lib/postgresql/data
+      - ./data/postgres_inventory_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-inventory}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  
+  postgres-orders:
+    image: postgres:17
+    container_name: postgres-orders
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secretpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-orders}
+    ports:
+      - "6543:5432"
+    volumes:
+      - ./data/postgres_orders_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-orders}"]
       interval: 10s
       timeout: 5s
       retries: 5
