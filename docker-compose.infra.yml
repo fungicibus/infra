@@ -1,7 +1,7 @@
 services:
   postgres-inventory:
     image: postgres:17
-    container_name: postgres-inventory
+    container_name: fungicibus-postgres-inventory
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secretpassword}
@@ -9,7 +9,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./data/postgres_inventory_data:/var/lib/postgresql/data
+      - ./data/postgres-inventory-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-inventory}"]
       interval: 10s
@@ -18,7 +18,7 @@ services:
   
   postgres-orders:
     image: postgres:17
-    container_name: postgres-orders
+    container_name: fungicibus-postgres-orders
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-admin}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secretpassword}
@@ -26,7 +26,7 @@ services:
     ports:
       - "6543:5432"
     volumes:
-      - ./data/postgres_orders_data:/var/lib/postgresql/data
+      - ./data/postgres-orders-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-orders}"]
       interval: 10s
@@ -35,7 +35,7 @@ services:
   
   victorialogs:
     image: victoriametrics/victoria-logs:v1.18.0-victorialogs
-    container_name: victorialogs
+    container_name: fungicibus-victorialogs
     ports:
       - "9428:9428"
     volumes:
@@ -44,3 +44,65 @@ services:
       - "--storageDataPath=/victoria-logs-data"
       - "--httpListenAddr=:9428"
     restart: unless-stopped
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:latest
+    container_name: fungicibus-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    volumes:
+      - ./data/zookeeper-data:/var/lib/zookeeper/data
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: fungicibus-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "10092:9092"
+    volumes:
+      - ./data/kafka-data:/var/lib/kafka/data
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redpanda-console:
+    image: redpandadata/console:latest
+    container_name: fungicibus-redpanda-console
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data/redpanda-console-data:/tmp/redpanda-console 
+    environment:
+      KAFKA_BROKERS: kafka:29092
+      REDPANDA_CONSOLE_CONFIG: |
+        kafka:
+          brokers: ["kafka:29092"]
+          schemaRegistry:
+            enabled: false
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
